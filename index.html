@@ -144,7 +144,6 @@ async function showCustomerDashboard(session){
  if(nameInput&&!nameInput.value)nameInput.value=profile.full_name||'';
  if(phoneInput&&!phoneInput.value)phoneInput.value=profile.phone||'';
  if(emailInput&&!emailInput.value)emailInput.value=user.email||'';
- if(!isAdmin) await loadMyOrders(user.id);
 }
 async function loadMyOrders(userId){
  const host=document.querySelector('#my-orders');host.innerHTML='<p class="small">Loading your orders…</p>';
@@ -162,7 +161,9 @@ async function startPaystack(orderId){
  }catch(e){alert(e.message);}
 }
 async function showBankTransfer(orderId,amount){
- const reference=prompt('Transfer ₦'+Number(amount).toLocaleString('en-NG')+' to the official Luxeluandry bank account. Enter your transfer reference here. Do not share your PIN or OTP.');
+ alert('Bank transfer is not open yet because the official bank name, account name and account number have not been added. Please do not transfer money until those details appear here.');
+ return;
+ const reference=prompt('Enter your bank transfer reference. Never share your PIN or OTP.');
  if(!reference||!reference.trim())return;
  const {data:{user}}=await db.auth.getUser();if(!user)return;
  const {error}=await db.from('payment_submissions').insert({order_id:orderId,customer_id:user.id,method:'bank_transfer',amount:Number(amount),reference:reference.trim(),status:'pending'});
@@ -253,7 +254,20 @@ document.querySelector('#order-form').addEventListener('submit',async e=>{
  finally{submit.disabled=false;submit.textContent='Submit laundry request ↗';}
 });
 renderItems();updateSummary();
-db.auth.getSession().then(({data})=>showCustomerDashboard(data.session));
+db.auth.getSession().then(async({data})=>{
+ await showCustomerDashboard(data.session);
+ const params=new URLSearchParams(window.location.search);
+ const reference=params.get('reference');
+ if(reference && params.get('trxref')){
+  try{
+   const session=data.session;
+   const res=await fetch(SUPABASE_URL+'/functions/v1/paystack',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({action:'verify',reference})});
+   const out=await res.json();if(!res.ok)throw new Error(out.error||'Payment verification failed.');
+   alert('Payment confirmed successfully.');await showCustomerDashboard(session);
+  }catch(e){alert(e.message);}
+  window.history.replaceState({},document.title,window.location.pathname);
+ }
+});
 
 </script>
 </body></html>
