@@ -38,12 +38,17 @@
   <h1 id="auth-title">Create your account.</h1>
   <p class="sub" id="auth-subtitle">Register first to access your private customer dashboard and place laundry orders.</p>
   <div class="auth-tabs"><button type="button" id="register-tab" class="active" onclick="setAuthMode('register')">Create account</button><button type="button" id="login-tab" onclick="setAuthMode('login')">Log in</button></div>
-  <form id="auth-form" class="auth-fields">
-   <label id="auth-name-wrap">Full name<input id="auth-name" autocomplete="name" required placeholder="Your full name"></label>
-   <label id="auth-phone-wrap">Phone number<input id="auth-phone" type="tel" autocomplete="tel" required placeholder="+234…"></label>
-   <label>Email address<input id="auth-email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
-   <label>Password<input id="auth-password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></label>
-   <button class="btn full" id="auth-submit" type="submit">Create my account →</button>
+  <form id="register-form" class="auth-fields">
+   <label>Full name<input id="register-name" autocomplete="name" required placeholder="Your full name"></label>
+   <label>Phone number<input id="register-phone" type="tel" autocomplete="tel" required placeholder="+234…"></label>
+   <label>Email address<input id="register-email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+   <label>Password<input id="register-password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></label>
+   <button class="btn full" id="register-submit" type="submit">Create my account →</button>
+  </form>
+  <form id="login-form" class="auth-fields hide">
+   <label>Email address<input id="login-email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+   <label>Password<input id="login-password" type="password" autocomplete="current-password" required placeholder="Your password"></label>
+   <button class="btn full" id="login-submit" type="submit">Log in →</button>
   </form>
   <div id="auth-message" class="auth-message" role="status"></div>
   <p class="small">Your account is private. You can only view your own laundry orders.</p>
@@ -94,14 +99,10 @@ let authMode = 'register';
 function setAuthMode(mode){
  authMode=mode;
  const isRegister=mode==='register';
- document.querySelector('#auth-name-wrap').classList.toggle('hide',!isRegister);
- document.querySelector('#auth-phone-wrap').classList.toggle('hide',!isRegister);
- document.querySelector('#auth-name').required=isRegister;
- document.querySelector('#auth-phone').required=isRegister;
- document.querySelector('#auth-password').autocomplete=isRegister?'new-password':'current-password';
+ document.querySelector('#register-form').classList.toggle('hide',!isRegister);
+ document.querySelector('#login-form').classList.toggle('hide',isRegister);
  document.querySelector('#auth-title').textContent=isRegister?'Create your account.':'Welcome back.';
- document.querySelector('#auth-subtitle').textContent=isRegister?'Register first to access your private customer dashboard and place laundry orders.':'Log in to see your dashboard and track your laundry.';
- document.querySelector('#auth-submit').textContent=isRegister?'Create my account →':'Log in →';
+ document.querySelector('#auth-subtitle').textContent=isRegister?'Register here to create your private Luxeluandry customer account.':'Log in here to open your customer dashboard and manage your laundry.';
  document.querySelector('#register-tab').classList.toggle('active',isRegister);
  document.querySelector('#login-tab').classList.toggle('active',!isRegister);
  document.querySelector('#auth-message').classList.remove('show');
@@ -137,23 +138,29 @@ async function loadMyOrders(userId){
 }
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 async function signOutCustomer(){await db.auth.signOut();await showCustomerDashboard(null);setAuthMode('login');}
-document.querySelector('#auth-form').addEventListener('submit',async e=>{
- e.preventDefault();const button=document.querySelector('#auth-submit');button.disabled=true;
- const email=document.querySelector('#auth-email').value.trim();const password=document.querySelector('#auth-password').value;
+async function submitAuth(form,mode){
+ const button=form.querySelector('button[type="submit"]');button.disabled=true;
  try{
-  if(authMode==='register'){
-   const full_name=document.querySelector('#auth-name').value.trim();const phone=document.querySelector('#auth-phone').value.trim();
+  if(mode==='register'){
+   const full_name=document.querySelector('#register-name').value.trim();
+   const phone=document.querySelector('#register-phone').value.trim();
+   const email=document.querySelector('#register-email').value.trim();
+   const password=document.querySelector('#register-password').value;
    const {data,error}=await db.auth.signUp({email,password,options:{data:{full_name,phone},emailRedirectTo:window.location.origin}});
    if(error)throw error;
    if(data.session){authNotice('Account created. Opening your dashboard…');await showCustomerDashboard(data.session);}
-   else{setAuthMode('login');authNotice('Account created. Check your email for the confirmation link, then return here and log in.');}
+   else{setAuthMode('login');authNotice('Account created. Check your email for the confirmation link, then use the separate Log in screen to enter your account.');}
   }else{
+   const email=document.querySelector('#login-email').value.trim();
+   const password=document.querySelector('#login-password').value;
    const {data,error}=await db.auth.signInWithPassword({email,password});if(error)throw error;
    await showCustomerDashboard(data.session);
   }
  }catch(err){authNotice(err.message||'Unable to complete your request.',true);}
  finally{button.disabled=false;}
-});
+}
+document.querySelector('#register-form').addEventListener('submit',e=>{e.preventDefault();submitAuth(e.currentTarget,'register');});
+document.querySelector('#login-form').addEventListener('submit',e=>{e.preventDefault();submitAuth(e.currentTarget,'login');});
 db.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>showCustomerDashboard(session),0);});
 
 const items=[{id:'shirt',name:'Shirt / blouse',icon:'👔',prices:{washiron:500,wash:350,iron:250,starch:650}},{id:'trousers',name:'Trousers / skirt',icon:'👖',prices:{washiron:700,wash:500,iron:350,starch:850}},{id:'shorts',name:'Shorts',icon:'🩳',prices:{washiron:400,wash:300,iron:200,starch:500}},{id:'native',name:'Native wear',icon:'🥻',prices:{washiron:1500,wash:1000,iron:800,starch:1800}},{id:'bedsheet',name:'Bedsheet',icon:'🛏️',prices:{washiron:1000,wash:800,iron:500,starch:1200}},{id:'suit',name:'Suit / jacket',icon:'🧥',prices:{washiron:2000,wash:1400,iron:1000,starch:2200}}];
