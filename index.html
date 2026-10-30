@@ -27,6 +27,12 @@
 .dash-order{display:flex;justify-content:space-between;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}
 .dash-order small{display:block;color:var(--muted)}
 .status-pill{font-size:11px;font-weight:800;background:var(--mint);padding:6px 9px;border-radius:99px;white-space:nowrap}
+.admin-row{background:#f7f9f5;border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:10px}
+.admin-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.admin-controls select,.admin-controls input{border:1px solid var(--line);border-radius:10px;padding:9px;background:white;color:var(--ink);max-width:100%}
+.pay-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+.pay-actions button{font-size:12px;padding:9px 13px}
+
 @media(max-width:480px){.auth-card{padding:22px}.dash-order{align-items:flex-start;flex-direction:column}}
 </style>
 </head>
@@ -60,9 +66,16 @@
   <button class="btn light" type="button" onclick="signOutCustomer()">Sign out</button>
  </div>
  <section class="shell" style="padding-bottom:10px">
-  <div class="order-panel">
-   <div class="section-head"><div><h2 style="font-size:25px">My laundry orders</h2><p class="sub">Only you can see the orders on this list.</p></div><button class="btn" onclick="document.querySelector('#order').scrollIntoView({behavior:'smooth'})">＋ New order</button></div>
+  <div id="customer-orders-panel" class="order-panel">
+   <div class="section-head"><div><h2 style="font-size:25px">My laundry orders</h2><p class="sub">Your order progress and payment status.</p></div><button class="btn" onclick="document.querySelector('#order').scrollIntoView({behavior:'smooth'})">＋ New order</button></div>
    <div id="my-orders" class="dash-orders"><p class="small">Loading your orders…</p></div>
+  </div>
+  <div id="admin-panel" class="order-panel hide" style="margin-top:18px">
+   <div class="eyebrow">Restricted owner area</div><h2 style="font-size:26px;margin:12px 0">Admin dashboard</h2>
+   <p class="sub">Manage customer orders, payment checks and laundry progress.</p>
+   <div id="admin-stats" class="dash-orders"></div>
+   <h3>All orders</h3><div id="admin-orders" class="dash-orders"><p class="small">Loading orders…</p></div>
+   <h3 style="margin-top:24px">Bank transfer reviews</h3><div id="admin-payments" class="dash-orders"><p class="small">Loading payment submissions…</p></div>
   </div>
  </section>
 <div id="legacy-site" class="hide">
@@ -118,26 +131,80 @@ async function showCustomerDashboard(session){
  const user=userData.user;
  const {data:profile,error:profileError}=await db.from('profiles').select('full_name,phone,role').eq('id',user.id).single();
  if(profileError){authNotice('Your account is signed in, but your customer profile could not be loaded: '+profileError.message,true);return;}
- if(profile.role!=='customer' && profile.role!=='admin'){authNotice('This account does not have customer access.',true);await signOutCustomer();return;}
+ const isAdmin=user.app_metadata?.role==='admin';
+ if(!isAdmin && profile.role!=='customer'){authNotice('This account does not have customer access.',true);await signOutCustomer();return;}
  document.querySelector('#auth-screen').classList.add('hide');
  document.querySelector('#customer-app').classList.remove('hide');
  document.querySelector('#legacy-site').classList.remove('hide');
- document.querySelector('#dash-name').textContent=profile.full_name||user.email||'there';
+ document.querySelector('#dash-name').textContent=isAdmin?'Admin':(profile.full_name||user.email||'there');
+ document.querySelector('#customer-orders-panel').classList.toggle('hide',isAdmin);
+ document.querySelector('#admin-panel').classList.toggle('hide',!isAdmin);
+ if(isAdmin){await loadAdminDashboard();} else {await loadMyOrders(user.id);} subscribeToLiveUpdates(user.id,isAdmin);
  const nameInput=document.querySelector('[name="name"]');const phoneInput=document.querySelector('[name="phone"]');const emailInput=document.querySelector('[name="email"]');
  if(nameInput&&!nameInput.value)nameInput.value=profile.full_name||'';
  if(phoneInput&&!phoneInput.value)phoneInput.value=profile.phone||'';
  if(emailInput&&!emailInput.value)emailInput.value=user.email||'';
- await loadMyOrders(user.id);
+ if(!isAdmin) await loadMyOrders(user.id);
 }
 async function loadMyOrders(userId){
  const host=document.querySelector('#my-orders');host.innerHTML='<p class="small">Loading your orders…</p>';
- const {data,error}=await db.from('orders').select('id,service,estimated_total,status,created_at').eq('customer_id',userId).order('created_at',{ascending:false}).limit(30);
+ const {data,error}=await db.from('orders').select('id,service,estimated_total,status,created_at,payment_status,payment_reference').eq('customer_id',userId).order('created_at',{ascending:false}).limit(30);
  if(error){host.textContent='Could not load your orders: '+error.message;return;}
  if(!data.length){host.innerHTML='<p class="small">You have no orders yet. Select “New order” when you are ready.</p>';return;}
- host.innerHTML=data.map(o=>'<div class="dash-order"><div><b>'+escapeHtml(o.service)+'</b><small>Order '+o.id.slice(0,8).toUpperCase()+' · '+new Date(o.created_at).toLocaleString()+'</small></div><div><b>'+money(Number(o.estimated_total))+'</b><div class="status-pill">'+escapeHtml(o.status.replaceAll('_',' '))+'</div></div></div>').join('');
+ host.innerHTML=data.map(o=>'<div class="dash-order"><div><b>'+escapeHtml(o.service)+'</b><small>Order '+o.id.slice(0,8).toUpperCase()+' · '+new Date(o.created_at).toLocaleString()+'</small><small>Payment: '+escapeHtml((o.payment_status||'unpaid').replaceAll('_',' '))+'</small></div><div><b>'+money(Number(o.estimated_total))+'</b><div class="status-pill">'+escapeHtml(o.status.replaceAll('_',' '))+'</div><div class="pay-actions">'+(o.payment_status==='paid'?'':('<button class="btn" onclick="startPaystack(\''+o.id+'\')">Pay with Paystack</button><button class="btn light" onclick="showBankTransfer(\''+o.id+'\', '+Number(o.estimated_total)+')">Bank transfer</button>'))+'</div></div></div>').join('');
+}
+async function startPaystack(orderId){
+ const {data:{session}}=await db.auth.getSession();if(!session){alert('Please log in again.');return;}
+ try{
+  const res=await fetch(SUPABASE_URL+'/functions/v1/paystack',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({action:'initialize',order_id:orderId})});
+  const out=await res.json();if(!res.ok)throw new Error(out.error||'Could not start Paystack payment.');
+  window.location.href=out.authorization_url;
+ }catch(e){alert(e.message);}
+}
+async function showBankTransfer(orderId,amount){
+ const reference=prompt('Transfer ₦'+Number(amount).toLocaleString('en-NG')+' to the official Luxeluandry bank account. Enter your transfer reference here. Do not share your PIN or OTP.');
+ if(!reference||!reference.trim())return;
+ const {data:{user}}=await db.auth.getUser();if(!user)return;
+ const {error}=await db.from('payment_submissions').insert({order_id:orderId,customer_id:user.id,method:'bank_transfer',amount:Number(amount),reference:reference.trim(),status:'pending'});
+ if(error){alert('Could not submit transfer reference: '+error.message);return;}
+ alert('Transfer reference submitted. Your payment will show as pending until an admin verifies it.');
+ await loadMyOrders(user.id);
+}
+async function loadAdminDashboard(){
+ const host=document.querySelector('#admin-orders'), payments=document.querySelector('#admin-payments');
+ host.innerHTML='<p class="small">Loading orders…</p>';
+ const {data:orders,error}=await db.from('orders').select('id,customer_id,service,estimated_total,address,arrangement,status,payment_status,payment_reference,created_at').order('created_at',{ascending:false}).limit(100);
+ if(error){host.textContent='Admin order access failed: '+error.message;return;}
+ const paid=orders.filter(o=>o.payment_status==='paid').length;
+ document.querySelector('#admin-stats').innerHTML='<div class="dash-order"><b>Total orders: '+orders.length+'</b><b>Paid: '+paid+'</b><b>Awaiting payment: '+(orders.length-paid)+'</b></div>';
+ host.innerHTML=orders.length?orders.map(o=>'<div class="admin-row"><div><b>'+escapeHtml(o.service)+'</b><small>Order '+o.id.slice(0,8).toUpperCase()+' · '+new Date(o.created_at).toLocaleString()+'</small><small>Customer ID: '+escapeHtml(o.customer_id)+'</small><small>'+escapeHtml(o.address||'No address')+' · '+money(Number(o.estimated_total))+'</small><small>Payment: '+escapeHtml(o.payment_status||'unpaid')+' · '+escapeHtml(o.payment_reference||'No reference')+'</small></div><div class="admin-controls"><select id="status-'+o.id+'"><option value="pending_review">Pending review</option><option value="confirmed">Confirmed</option><option value="pickup_scheduled">Pickup scheduled</option><option value="picked_up">Picked up</option><option value="washing">Washing</option><option value="ironing">Ironing</option><option value="ready">Ready</option><option value="out_for_delivery">Out for delivery</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option></select><select id="payment-'+o.id+'"><option value="unpaid">Unpaid</option><option value="pending_verification">Pending verification</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="refunded">Refunded</option></select><button class="btn" onclick="adminUpdateOrder(\''+o.id+'\')">Save updates</button></div></div>').join(''):'<p class="small">No orders yet.</p>';
+ for(const o of orders){document.querySelector('#status-'+o.id).value=o.status;document.querySelector('#payment-'+o.id).value=o.payment_status||'unpaid';}
+ const {data:subs,error:subError}=await db.from('payment_submissions').select('id,order_id,customer_id,method,amount,reference,status,created_at').order('created_at',{ascending:false}).limit(100);
+ if(subError){payments.textContent='Could not load payment submissions: '+subError.message;return;}
+ payments.innerHTML=subs.length?subs.map(p=>'<div class="admin-row"><b>'+escapeHtml(p.method.replaceAll('_',' '))+' · '+money(Number(p.amount))+'</b><small>Order '+p.order_id.slice(0,8).toUpperCase()+' · '+escapeHtml(p.reference||'No reference')+'</small><small>Customer '+escapeHtml(p.customer_id)+' · '+escapeHtml(p.status)+'</small><div class="admin-controls"><button class="btn" onclick="reviewBankPayment(\''+p.id+'\',\''+p.order_id+'\',true)">Confirm payment</button><button class="btn light" onclick="reviewBankPayment(\''+p.id+'\',\''+p.order_id+'\',false)">Reject</button></div></div>').join(''):'<p class="small">No payment submissions waiting for review.</p>';
+}
+async function adminUpdateOrder(id){
+ const status=document.querySelector('#status-'+id).value,payment_status=document.querySelector('#payment-'+id).value;
+ const updates={status,payment_status};if(payment_status==='paid')updates.paid_at=new Date().toISOString();
+ const {error}=await db.from('orders').update(updates).eq('id',id);if(error){alert('Update failed: '+error.message);return;}
+ alert('Order updated.');await loadAdminDashboard();
+}
+async function reviewBankPayment(paymentId,orderId,approved){
+ const {error}=await db.from('payment_submissions').update({status:approved?'confirmed':'rejected',reviewed_at:new Date().toISOString()}).eq('id',paymentId);
+ if(error){alert('Could not review payment: '+error.message);return;}
+ if(approved){const {error:orderError}=await db.from('orders').update({payment_status:'paid',paid_at:new Date().toISOString()}).eq('id',orderId);if(orderError){alert('Payment review saved but order update failed: '+orderError.message);return;}}
+ else {await db.from('orders').update({payment_status:'unpaid'}).eq('id',orderId);}
+ await loadAdminDashboard();
+}
+function subscribeToLiveUpdates(userId,isAdmin){
+ db.removeChannel(window.orderRealtimeChannel);
+ window.orderRealtimeChannel=db.channel('luxeluandry-live-'+userId)
+ .on('postgres_changes',{event:'*',schema:'public',table:'orders',...(isAdmin?{}:{filter:'customer_id=eq.'+userId})},()=>{if(isAdmin)loadAdminDashboard();else loadMyOrders(userId);})
+ .on('postgres_changes',{event:'*',schema:'public',table:'payment_submissions',...(isAdmin?{}:{filter:'customer_id=eq.'+userId})},()=>{if(isAdmin)loadAdminDashboard();else loadMyOrders(userId);})
+ .subscribe();
 }
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-async function signOutCustomer(){await db.auth.signOut();await showCustomerDashboard(null);setAuthMode('login');}
+async function signOutCustomer(){if(window.orderRealtimeChannel)db.removeChannel(window.orderRealtimeChannel);await db.auth.signOut();await showCustomerDashboard(null);setAuthMode('login');}
 async function submitAuth(form,mode){
  const button=form.querySelector('button[type="submit"]');button.disabled=true;
  try{
