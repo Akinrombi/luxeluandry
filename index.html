@@ -69,6 +69,9 @@
   <div id="customer-orders-panel" class="order-panel">
    <div class="section-head"><div><h2 style="font-size:25px">My laundry orders</h2><p class="sub">Your order progress and payment status.</p></div><button class="btn" onclick="document.querySelector('#order').scrollIntoView({behavior:'smooth'})">＋ New order</button></div>
    <div id="my-orders" class="dash-orders"><p class="small">Loading your orders…</p></div>
+   <h3 style="margin-top:26px">Payment history & receipts</h3>
+   <p class="sub">Review previous payments and print receipts for confirmed payments.</p>
+   <div id="my-payments" class="dash-orders"><p class="small">Loading payment history…</p></div>
   </div>
   <div id="admin-panel" class="order-panel hide" style="margin-top:18px">
    <div class="eyebrow">Restricted owner area</div><h2 style="font-size:26px;margin:12px 0">Admin dashboard</h2>
@@ -146,11 +149,34 @@ async function showCustomerDashboard(session){
  if(emailInput&&!emailInput.value)emailInput.value=user.email||'';
 }
 async function loadMyOrders(userId){
- const host=document.querySelector('#my-orders');host.innerHTML='<p class="small">Loading your orders…</p>';
- const {data,error}=await db.from('orders').select('id,service,estimated_total,status,created_at,payment_status,payment_reference').eq('customer_id',userId).order('created_at',{ascending:false}).limit(30);
+ const host=document.querySelector('#my-orders'),paymentHost=document.querySelector('#my-payments');
+ host.innerHTML='<p class="small">Loading your orders…</p>';
+ const {data,error}=await db.from('orders').select('id,service,items,estimated_total,status,created_at,payment_status,payment_reference,paid_at,payment_preference,address').eq('customer_id',userId).order('created_at',{ascending:false}).limit(100);
  if(error){host.textContent='Could not load your orders: '+error.message;return;}
- if(!data.length){host.innerHTML='<p class="small">You have no orders yet. Select “New order” when you are ready.</p>';return;}
- host.innerHTML=data.map(o=>'<div class="dash-order"><div><b>'+escapeHtml(o.service)+'</b><small>Order '+o.id.slice(0,8).toUpperCase()+' · '+new Date(o.created_at).toLocaleString()+'</small><small>Payment: '+escapeHtml((o.payment_status||'unpaid').replaceAll('_',' '))+'</small></div><div><b>'+money(Number(o.estimated_total))+'</b><div class="status-pill">'+escapeHtml(o.status.replaceAll('_',' '))+'</div><div class="pay-actions">'+(o.payment_status==='paid'?'':('<button class="btn" onclick="startPaystack(\''+o.id+'\')">Pay with Paystack</button><button class="btn light" onclick="showBankTransfer(\''+o.id+'\', '+Number(o.estimated_total)+')">Bank transfer</button>'))+'</div></div></div>').join('');
+ if(!data.length){host.innerHTML='<p class="small">No past orders yet. Your orders will appear here after you place one.</p>';}
+ else{
+  host.innerHTML=data.map(o=>{
+   const lines=Array.isArray(o.items)?o.items.map(it=>'<small>'+escapeHtml(it.quantity)+' × '+escapeHtml(it.name)+' · '+money(Number(it.unit_price||0))+' each</small>').join(''):'';
+   const receipt=o.payment_status==='paid'?'<button class="btn light" onclick="printReceipt(\''+o.id+'\')">Print receipt</button>':'';
+   const pay=o.payment_status==='paid'?'Payment confirmed':(o.payment_status||'unpaid').replaceAll('_',' ');
+   return '<div class="dash-order"><div><b>'+escapeHtml(o.service)+'</b><small>Order '+o.id.slice(0,8).toUpperCase()+' · '+new Date(o.created_at).toLocaleString()+'</small>'+lines+'<small>Payment: '+escapeHtml(pay)+'</small></div><div><b>'+money(Number(o.estimated_total))+'</b><div class="status-pill">'+escapeHtml((o.status||'pending').replaceAll('_',' '))+'</div><div class="pay-actions">'+receipt+(o.payment_status==='paid'?'':'<button class="btn" onclick="startPaystack(\''+o.id+'\')">Pay with Paystack</button><button class="btn light" onclick="showBankTransfer(\''+o.id+'\', '+Number(o.estimated_total)+')">Bank transfer</button>')+'</div></div></div>';
+  }).join('');
+ }
+ const {data:payments,paymentError}=await db.from('payment_submissions').select('id,order_id,method,amount,reference,status,created_at').eq('customer_id',userId).order('created_at',{ascending:false}).limit(100);
+ if(paymentError){paymentHost.textContent='Could not load payment history: '+paymentError.message;return;}
+ paymentHost.innerHTML=payments.length?payments.map(p=>'<div class="dash-order"><div><b>'+escapeHtml((p.method||'payment').replaceAll('_',' '))+'</b><small>Order '+p.order_id.slice(0,8).toUpperCase()+' · '+new Date(p.created_at).toLocaleString()+'</small><small>Reference: '+escapeHtml(p.reference||'Not supplied')+'</small></div><div><b>'+money(Number(p.amount))+'</b><div class="status-pill">'+escapeHtml(p.status||'pending')+'</div></div></div>').join(''):'<p class="small">No payment attempts or transfer submissions have been recorded yet.</p>';
+}
+async function printReceipt(orderId){
+ const {data:{user},error:userError}=await db.auth.getUser();
+ if(userError||!user){alert('Please log in again to view your receipt.');return;}
+ const {data:o,error}=await db.from('orders').select('id,customer_id,service,items,estimated_total,status,payment_status,payment_reference,paid_at,created_at,payment_preference').eq('id',orderId).eq('customer_id',user.id).single();
+ if(error||!o){alert('Could not load this receipt.');return;}
+ if(o.payment_status!=='paid'){alert('A receipt is available after payment has been confirmed.');return;}
+ const rows=(Array.isArray(o.items)?o.items:[]).map(it=>'<tr><td>'+escapeHtml(it.name)+'</td><td>'+escapeHtml(it.quantity)+'</td><td>'+money(Number(it.unit_price||0))+'</td><td>'+money(Number(it.quantity||0)*Number(it.unit_price||0))+'</td></tr>').join('');
+ const w=window.open('','_blank','width=760,height=800');
+ if(!w){alert('Please allow pop-ups to print your receipt.');return;}
+ w.document.write('<!doctype html><html><head><title>Luxeluandry receipt</title><style>body{font:15px Arial,sans-serif;color:#173a30;padding:36px;max-width:760px;margin:auto}h1{margin-bottom:4px}small{color:#66766e}.meta{margin:24px 0;line-height:1.9}table{width:100%;border-collapse:collapse;margin:22px 0}th,td{text-align:left;padding:12px 8px;border-bottom:1px solid #ddd}.total{text-align:right;font-size:22px;font-weight:bold;margin-top:24px}.paid{display:inline-block;padding:7px 12px;background:#eaf3ed;border-radius:20px;font-weight:bold}@media print{button{display:none}}</style></head><body><h1>✦ luxeluandry</h1><small>Payment receipt</small><p class="paid">PAYMENT CONFIRMED</p><div class="meta"><b>Receipt / Order:</b> '+o.id.toUpperCase()+'<br><b>Date:</b> '+new Date(o.paid_at||o.created_at).toLocaleString()+'<br><b>Service:</b> '+escapeHtml(o.service)+'<br><b>Payment method:</b> '+escapeHtml(o.payment_preference||'Not recorded')+'<br><b>Reference:</b> '+escapeHtml(o.payment_reference||'Not available')+'</div><table><thead><tr><th>Item</th><th>Qty</th><th>Unit price</th><th>Amount</th></tr></thead><tbody>'+rows+'</tbody></table><div class="total">Total paid: '+money(Number(o.estimated_total))+'</div><p>Thank you for choosing Luxeluandry.</p><button onclick="window.print()">Print receipt</button></body></html>');
+ w.document.close();w.focus();setTimeout(()=>w.print(),300);
 }
 async function startPaystack(orderId){
  const {data:{session}}=await db.auth.getSession();if(!session){alert('Please log in again.');return;}
