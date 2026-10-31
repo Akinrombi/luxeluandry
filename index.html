@@ -275,6 +275,7 @@ function subscribeToLiveUpdates(userId,isAdmin){
  window.orderRealtimeChannel=db.channel('luxeluandry-live-'+userId)
  .on('postgres_changes',{event:'*',schema:'public',table:'orders',...(isAdmin?{}:{filter:'customer_id=eq.'+userId})},()=>{if(isAdmin)loadAdminDashboard();else loadMyOrders(userId);})
  .on('postgres_changes',{event:'*',schema:'public',table:'payment_submissions',...(isAdmin?{}:{filter:'customer_id=eq.'+userId})},()=>{if(isAdmin)loadAdminDashboard();else loadMyOrders(userId);})
+ .on('postgres_changes',{event:'*',schema:'public',table:'laundry_catalog'},()=>{if(!isAdmin)loadCustomerCatalog();})
  .subscribe();
 }
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
