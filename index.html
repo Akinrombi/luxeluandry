@@ -74,6 +74,7 @@
   <button class="btn light" type="button" onclick="signOutCustomer()">Sign out</button>
  </div>
  <section class="shell" style="padding-bottom:10px">
+<div id="customer-orders-panel">
 <nav class="customer-nav" aria-label="Customer sections">
 <button class="active" data-customer-view="dashboard" onclick="openCustomerSection('dashboard')">Dashboard</button>
 <button data-customer-view="profile" onclick="openCustomerSection('profile')">My profile</button>
@@ -87,6 +88,7 @@
 <section id="customer-history-view" class="customer-view hide"><div class="eyebrow">Your laundry activity</div><h2>Order history</h2><p class="sub">Previous orders, clothing details, totals and progress.</p><div id="my-orders" class="dash-orders"><p class="small">Loading…</p></div></section>
 <section id="customer-payments-view" class="customer-view hide"><div class="eyebrow">Your transactions</div><h2>Payments & receipts</h2><p class="sub">Payment records and printable receipts for confirmed payments.</p><div id="my-payments" class="dash-orders"><p class="small">Loading…</p></div></section>
 <section id="customer-new-order-view" class="customer-view hide"><div class="eyebrow">Book laundry</div><h2>Start a new order</h2><p class="sub">Choose your service, add clothing and provide pickup details.</p><div id="customer-new-order-content"></div></section>
+  </div>
   <div id="admin-panel" class="order-panel hide" style="margin-top:18px">
    <div class="eyebrow">Restricted owner area</div><h2 style="font-size:26px;margin:12px 0">Admin dashboard</h2>
    <p class="sub">Manage customer orders, payment checks and laundry progress.</p>
