@@ -10,6 +10,14 @@
 @media(max-width:800px){.hero{grid-template-columns:1fr;padding-top:40px;gap:28px}.visual{min-height:320px}.services{grid-template-columns:repeat(2,1fr)}.panel-grid{grid-template-columns:1fr}.nav a:not(.nav-cta){display:none}.section-head{align-items:start;flex-direction:column}.steps{grid-template-columns:1fr}.topbar{height:68px}h1{letter-spacing:-2px}}
 @media(max-width:420px){.shell{padding:0 16px}.services{gap:9px}.service{padding:15px}.order-panel{padding:15px}.cloth{gap:8px;padding:9px}.qty{gap:6px}.formgrid{grid-template-columns:1fr}.field.wide{grid-column:auto}}
 
+.customer-nav{display:flex;gap:8px;overflow-x:auto;padding:12px 0 18px;position:sticky;top:0;background:var(--cream);z-index:5}
+.customer-nav button{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:13px;padding:11px 16px;font-weight:750;white-space:nowrap}
+.customer-nav button.active{background:var(--green);color:#fff;border-color:var(--green)}
+.customer-view{padding:8px 0 36px}.overview-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin:18px 0}
+.overview-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px}.overview-card small{display:block;color:var(--muted);font-weight:650}
+.overview-card strong{display:block;font-size:27px;margin-top:5px}.profile-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px;max-width:700px}
+.profile-card form{display:grid;gap:14px}.customer-view h2{font-size:27px;letter-spacing:-.8px;margin:8px 0}
+@media(max-width:600px){.overview-grid{grid-template-columns:1fr 1fr}.overview-card:last-child{grid-column:1/-1}}
 .auth-screen{min-height:100vh;display:grid;place-items:center;padding:28px 16px;background:radial-gradient(circle at 80% 10%,#d6f36a55,transparent 30%),var(--cream)}
 .auth-card{width:min(100%,480px);background:#fff;border:1px solid var(--line);border-radius:26px;padding:30px;box-shadow:var(--shadow)}
 .auth-brand{display:flex;align-items:center;gap:10px;font-weight:850;font-size:22px;margin-bottom:20px}
@@ -66,13 +74,19 @@
   <button class="btn light" type="button" onclick="signOutCustomer()">Sign out</button>
  </div>
  <section class="shell" style="padding-bottom:10px">
-  <div id="customer-orders-panel" class="order-panel">
-   <div class="section-head"><div><h2 style="font-size:25px">My laundry orders</h2><p class="sub">Your order progress and payment status.</p></div><button class="btn" onclick="document.querySelector('#order').scrollIntoView({behavior:'smooth'})">＋ New order</button></div>
-   <div id="my-orders" class="dash-orders"><p class="small">Loading your orders…</p></div>
-   <h3 style="margin-top:26px">Payment history & receipts</h3>
-   <p class="sub">Review previous payments and print receipts for confirmed payments.</p>
-   <div id="my-payments" class="dash-orders"><p class="small">Loading payment history…</p></div>
-  </div>
+<nav class="customer-nav" aria-label="Customer sections">
+<button class="active" data-customer-view="dashboard" onclick="openCustomerSection('dashboard')">Dashboard</button>
+<button data-customer-view="profile" onclick="openCustomerSection('profile')">My profile</button>
+<button data-customer-view="history" onclick="openCustomerSection('history')">Order history</button>
+<button data-customer-view="payments" onclick="openCustomerSection('payments')">Payments</button>
+<button data-customer-view="new-order" onclick="openCustomerSection('new-order')">＋ New order</button></nav>
+<section id="customer-dashboard-view" class="customer-view"><div class="eyebrow">Your overview</div><h2>Welcome back, <span id="overview-name">there</span>.</h2><p class="sub">A quick look at your laundry activity.</p>
+<div class="overview-grid"><div class="overview-card"><small>Total orders</small><strong id="overview-orders">0</strong></div><div class="overview-card"><small>In progress</small><strong id="overview-active">0</strong></div><div class="overview-card"><small>Payments confirmed</small><strong id="overview-paid">₦0</strong></div></div>
+<div class="order-panel"><div class="section-head"><div><h2 style="font-size:22px">Latest order</h2><p class="sub">Your most recent laundry request.</p></div><button class="btn light" onclick="openCustomerSection('history')">View history</button></div><div id="dashboard-latest" class="dash-orders"><p class="small">Loading…</p></div></div><p><button class="btn" onclick="openCustomerSection('new-order')">＋ Place a new order</button></p></section>
+<section id="customer-profile-view" class="customer-view hide"><div class="eyebrow">Your account</div><h2>My profile</h2><p class="sub">Keep your contact details up to date.</p><div class="profile-card"><form id="profile-form"><label class="field">Full name<input id="profile-full-name" required autocomplete="name"></label><label class="field">Phone number<input id="profile-phone" type="tel" required autocomplete="tel"></label><label class="field">Email address<input id="profile-email" type="email" disabled></label><button class="btn">Save profile</button><div id="profile-notice" class="notice"></div></form></div></section>
+<section id="customer-history-view" class="customer-view hide"><div class="eyebrow">Your laundry activity</div><h2>Order history</h2><p class="sub">Previous orders, clothing details, totals and progress.</p><div id="my-orders" class="dash-orders"><p class="small">Loading…</p></div></section>
+<section id="customer-payments-view" class="customer-view hide"><div class="eyebrow">Your transactions</div><h2>Payments & receipts</h2><p class="sub">Payment records and printable receipts for confirmed payments.</p><div id="my-payments" class="dash-orders"><p class="small">Loading…</p></div></section>
+<section id="customer-new-order-view" class="customer-view hide"><div class="eyebrow">Book laundry</div><h2>Start a new order</h2><p class="sub">Choose your service, add clothing and provide pickup details.</p><div id="customer-new-order-content"></div></section>
   <div id="admin-panel" class="order-panel hide" style="margin-top:18px">
    <div class="eyebrow">Restricted owner area</div><h2 style="font-size:26px;margin:12px 0">Admin dashboard</h2>
    <p class="sub">Manage customer orders, payment checks and laundry progress.</p>
@@ -127,6 +141,34 @@ function authNotice(message,isError=false){
  const el=document.querySelector('#auth-message');el.textContent=message;el.classList.add('show');
  el.style.background=isError?'#fff0ed':'#edf6e8';
 }
+function openCustomerSection(section){
+ ['dashboard','profile','history','payments','new-order'].forEach(id=>{
+  const el=document.querySelector('#customer-'+id+'-view');if(el)el.classList.toggle('hide',id!==section);
+ });
+ document.querySelectorAll('[data-customer-view]').forEach(b=>b.classList.toggle('active',b.dataset.customerView===section));
+ if(section==='profile')loadCustomerProfile();
+}
+function mountCustomerOrderBuilder(){
+ const host=document.querySelector('#customer-new-order-content');if(!host||host.dataset.ready==='yes')return;
+ const services=document.querySelector('#services'),order=document.querySelector('#order');
+ if(services&&order){host.appendChild(services);host.appendChild(order);host.dataset.ready='yes';}
+}
+async function loadCustomerProfile(){
+ const {data:{user}}=await db.auth.getUser();if(!user)return;
+ const {data:p,error}=await db.from('profiles').select('full_name,phone').eq('id',user.id).single();
+ if(error){profileNotice('Could not load profile: '+error.message,true);return;}
+ document.querySelector('#profile-full-name').value=p.full_name||'';
+ document.querySelector('#profile-phone').value=p.phone||'';
+ document.querySelector('#profile-email').value=user.email||'';
+}
+function profileNotice(msg,bad=false){const el=document.querySelector('#profile-notice');el.textContent=msg;el.classList.add('show');el.style.background=bad?'#fff0ed':'#edf6e8';}
+document.querySelector('#profile-form').addEventListener('submit',async e=>{
+ e.preventDefault();const {data:{user}}=await db.auth.getUser();if(!user)return;
+ const full_name=document.querySelector('#profile-full-name').value.trim(),phone=document.querySelector('#profile-phone').value.trim();
+ const {error}=await db.from('profiles').update({full_name,phone}).eq('id',user.id);
+ if(error){profileNotice('Could not save profile: '+error.message,true);return;}
+ document.querySelector('#dash-name').textContent=full_name;document.querySelector('#overview-name').textContent=full_name;profileNotice('Profile updated successfully.');
+});
 async function showCustomerDashboard(session){
  if(!session){document.querySelector('#auth-screen').classList.remove('hide');document.querySelector('#customer-app').classList.add('hide');document.querySelector('#legacy-site').classList.add('hide');return;}
  const {data:userData,error:userError}=await db.auth.getUser();
@@ -138,11 +180,13 @@ async function showCustomerDashboard(session){
  if(!isAdmin && profile.role!=='customer'){authNotice('This account does not have customer access.',true);await signOutCustomer();return;}
  document.querySelector('#auth-screen').classList.add('hide');
  document.querySelector('#customer-app').classList.remove('hide');
- document.querySelector('#legacy-site').classList.remove('hide');
+ document.querySelector('#legacy-site').classList.add('hide');
+ mountCustomerOrderBuilder();
  document.querySelector('#dash-name').textContent=isAdmin?'Admin':(profile.full_name||user.email||'there');
+ document.querySelector('#overview-name').textContent=profile.full_name||user.email||'there';
  document.querySelector('#customer-orders-panel').classList.toggle('hide',isAdmin);
  document.querySelector('#admin-panel').classList.toggle('hide',!isAdmin);
- if(isAdmin){await loadAdminDashboard();} else {await loadMyOrders(user.id);} subscribeToLiveUpdates(user.id,isAdmin);
+ if(isAdmin){await loadAdminDashboard();} else {mountCustomerOrderBuilder();await loadCustomerProfile();await loadMyOrders(user.id);openCustomerSection('dashboard');} subscribeToLiveUpdates(user.id,isAdmin);
  const nameInput=document.querySelector('[name="name"]');const phoneInput=document.querySelector('[name="phone"]');const emailInput=document.querySelector('[name="email"]');
  if(nameInput&&!nameInput.value)nameInput.value=profile.full_name||'';
  if(phoneInput&&!phoneInput.value)phoneInput.value=profile.phone||'';
@@ -153,7 +197,7 @@ async function loadMyOrders(userId){
  host.innerHTML='<p class="small">Loading your orders…</p>';
  const {data,error}=await db.from('orders').select('id,service,items,estimated_total,status,created_at,payment_status,payment_reference,paid_at,payment_preference,address').eq('customer_id',userId).order('created_at',{ascending:false}).limit(100);
  if(error){host.textContent='Could not load your orders: '+error.message;return;}
- if(!data.length){host.innerHTML='<p class="small">No past orders yet. Your orders will appear here after you place one.</p>';}
+ const active=data.filter(o=>!['delivered','cancelled'].includes((o.status||'').toLowerCase())).length;const paid=data.filter(o=>o.payment_status==='paid').reduce((s,o)=>s+Number(o.estimated_total||0),0);document.querySelector('#overview-orders').textContent=data.length;document.querySelector('#overview-active').textContent=active;document.querySelector('#overview-paid').textContent=money(paid);\n if(!data.length){host.innerHTML='<p class="small">No past orders yet. Your orders will appear here after you place one.</p>';document.querySelector('#dashboard-latest').innerHTML='<p class="small">No orders yet. Place your first laundry order when ready.</p>';}
  else{
   host.innerHTML=data.map(o=>{
    const lines=Array.isArray(o.items)?o.items.map(it=>'<small>'+escapeHtml(it.quantity)+' × '+escapeHtml(it.name)+' · '+money(Number(it.unit_price||0))+' each</small>').join(''):'';
