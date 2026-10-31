@@ -304,17 +304,18 @@ document.querySelector('#register-form').addEventListener('submit',e=>{e.prevent
 document.querySelector('#login-form').addEventListener('submit',e=>{e.preventDefault();submitAuth(e.currentTarget,'login');});
 db.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>showCustomerDashboard(session),0);});
 
-const items=[{id:'shirt',name:'Shirt / blouse',icon:'👔',prices:{washiron:500,wash:350,iron:250,starch:650}},{id:'trousers',name:'Trousers / skirt',icon:'👖',prices:{washiron:700,wash:500,iron:350,starch:850}},{id:'shorts',name:'Shorts',icon:'🩳',prices:{washiron:400,wash:300,iron:200,starch:500}},{id:'native',name:'Native wear',icon:'🥻',prices:{washiron:1500,wash:1000,iron:800,starch:1800}},{id:'bedsheet',name:'Bedsheet',icon:'🛏️',prices:{washiron:1000,wash:800,iron:500,starch:1200}},{id:'suit',name:'Suit / jacket',icon:'🧥',prices:{washiron:2000,wash:1400,iron:1000,starch:2200}}];
+let items=[];
 const services={washiron:'Wash & iron',wash:'Wash only',iron:'Iron only',starch:'Wash, iron & starch'};let service='washiron',qty={};
 const money=n=>'₦'+Number(n).toLocaleString('en-NG');
+async function loadCustomerCatalog(){const {data,error}=await db.from('laundry_catalog').select('id,item_key,name,icon,prices,stock_quantity,active').eq('active',true).order('sort_order').order('name');if(error){document.querySelector('#clothes').textContent='Could not load current items: '+error.message;return;}items=(data||[]).map(x=>({id:x.item_key,name:x.name,icon:x.icon,prices:x.prices||{},stock_quantity:Number(x.stock_quantity||0)}));renderItems();updateSummary();}
 function chooseService(s){service=s;document.querySelectorAll('.service').forEach(b=>b.classList.toggle('active',b.dataset.service===s));document.querySelector('#service-title').textContent=services[s];renderItems();updateSummary();document.querySelector('#order').scrollIntoView({behavior:'smooth'});}
-function renderItems(){document.querySelector('#clothes').innerHTML=items.map(it=>'<div class="cloth"><div class="cloth-icon">'+it.icon+'</div><div class="cloth-info"><b>'+it.name+'</b><small>'+money(it.prices[service])+' / item</small></div><div class="qty"><button type="button" aria-label="Remove one '+it.name+'" onclick="changeQty(\''+it.id+'\',-1)">−</button><b>'+(qty[it.id]||0)+'</b><button type="button" aria-label="Add one '+it.name+'" onclick="changeQty(\''+it.id+'\',1)">+</button></div></div>').join('');}
-function changeQty(id,n){qty[id]=Math.max(0,(qty[id]||0)+n);renderItems();updateSummary();}
-function updateSummary(){let count=0,total=0;items.forEach(it=>{count+=qty[it.id]||0;total+=(qty[it.id]||0)*it.prices[service]});document.querySelector('#sum-service').textContent=services[service];document.querySelector('#sum-items').textContent=count;document.querySelector('#sum-subtotal').textContent=money(total);document.querySelector('#sum-total').textContent=money(total);}
+function renderItems(){document.querySelector('#clothes').innerHTML=items.length?items.map(it=>'<div class="cloth"><div class="cloth-icon">'+escapeHtml(it.icon)+'</div><div class="cloth-info"><b>'+escapeHtml(it.name)+'</b><small>'+money(it.prices[service]||0)+' / item · Stock: '+it.stock_quantity+'</small></div><div class="qty"><button type="button" aria-label="Remove one '+escapeHtml(it.name)+'" onclick="changeQty(\''+it.id+'\',-1)">−</button><b>'+(qty[it.id]||0)+'</b><button type="button" aria-label="Add one '+escapeHtml(it.name)+'" '+((qty[it.id]||0)>=it.stock_quantity?'disabled':'')+' onclick="changeQty(\''+it.id+'\',1)">+</button></div></div>').join(''):'<p class="small">No laundry items are currently available. Please check again later.</p>';}
+function changeQty(id,n){const it=items.find(x=>x.id===id);if(!it)return;qty[id]=Math.max(0,Math.min(it.stock_quantity,(qty[id]||0)+n));renderItems();updateSummary();}
+function updateSummary(){let count=0,total=0;items.forEach(it=>{count+=qty[it.id]||0;total+=(qty[it.id]||0)*Number(it.prices[service]||0)});document.querySelector('#sum-service').textContent=services[service];document.querySelector('#sum-items').textContent=count;document.querySelector('#sum-subtotal').textContent=money(total);document.querySelector('#sum-total').textContent=money(total);}
 document.querySelector('#order-form').addEventListener('submit',async e=>{
  e.preventDefault();const notice=document.querySelector('#form-notice');notice.classList.remove('show');
  const {data:authData,error:authError}=await db.auth.getUser();if(authError||!authData.user){notice.textContent='Please log in before placing an order.';notice.classList.add('show');return;}
- const selected=items.filter(it=>(qty[it.id]||0)>0).map(it=>({id:it.id,name:it.name,quantity:qty[it.id],unit_price:it.prices[service]}));
+ const selected=items.filter(it=>(qty[it.id]||0)>0).map(it=>({id:it.id,name:it.name,quantity:qty[it.id],unit_price:Number(it.prices[service]||0)}));
  if(!selected.length){notice.textContent='Please add at least one clothing item before submitting your request.';notice.classList.add('show');return;}
  const total=selected.reduce((sum,it)=>sum+it.quantity*it.unit_price,0);const f=new FormData(e.target);
  const payload={customer_id:authData.user.id,service:services[service],items:selected,estimated_total:total,arrangement:f.get('arrangement'),address:String(f.get('address')||'').trim(),notes:String(f.get('notes')||''),payment_preference:f.get('payment'),status:'pending_review'};
@@ -326,7 +327,7 @@ document.querySelector('#order-form').addEventListener('submit',async e=>{
  }catch(err){notice.textContent='Order was not saved: '+(err.message||'Please try again.');notice.classList.add('show');}
  finally{submit.disabled=false;submit.textContent='Submit laundry request ↗';}
 });
-renderItems();updateSummary();
+loadCustomerCatalog();
 db.auth.getSession().then(async({data})=>{
  await showCustomerDashboard(data.session);
  const params=new URLSearchParams(window.location.search);
