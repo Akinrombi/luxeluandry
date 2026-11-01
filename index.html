@@ -42,7 +42,7 @@
 .pay-actions button{font-size:12px;padding:9px 13px}
 
 @media(max-width:480px){.auth-card{padding:22px}.dash-order{align-items:flex-start;flex-direction:column}}
-</style>
+.payment-screen{max-width:680px;margin:26px auto 50px;background:#fff;border:1px solid var(--line);border-radius:24px;padding:26px;box-shadow:var(--shadow)}.payment-choice{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0}.payment-option{border:1px solid var(--line);border-radius:18px;padding:20px;background:#fbfcf9}.payment-option h3{margin:0 0 7px}.payment-option p{font-size:13px;color:var(--muted);min-height:42px}.payment-option .btn{width:100%}.payment-back{margin-top:12px}@media(max-width:560px){.payment-choice{grid-template-columns:1fr}.payment-screen{padding:18px}}</style>
 </head>
 <body>
 <section id="auth-screen" class="auth-screen">
@@ -89,6 +89,7 @@
 <section id="customer-payments-view" class="customer-view hide"><div class="eyebrow">Your transactions</div><h2>Payments & receipts</h2><p class="sub">Payment records and printable receipts for confirmed payments.</p><div id="my-payments" class="dash-orders"><p class="small">Loading…</p></div></section>
 <section id="customer-new-order-view" class="customer-view hide"><div class="eyebrow">Book laundry</div><h2>Start a new order</h2><p class="sub">Choose your service, add clothing and provide pickup details.</p><div id="customer-new-order-content"></div></section>
   </div>
+<section id="customer-payment-screen" class="payment-screen hide"><div class="eyebrow">Order submitted</div><h2 style="font-size:28px;margin:12px 0 6px">Choose how to pay</h2><p class="sub">Your order request has been saved. Choose a payment method below — no need to search through your dashboard.</p><div class="overview-card" style="margin-top:18px"><small>Order reference</small><strong id="payment-order-ref" style="font-size:20px">—</strong><small style="margin-top:8px">Amount due</small><strong id="payment-order-amount">₦0</strong></div><div class="payment-choice"><div class="payment-option"><div style="font-size:28px">💳</div><h3>Pay with Paystack</h3><p>Pay securely online with your card or other Paystack-supported methods.</p><button class="btn" type="button" onclick="payCurrentOrder()">Continue to Paystack →</button></div><div class="payment-option"><div style="font-size:28px">🏦</div><h3>Bank transfer</h3><p>Choose bank transfer and view the instructions for sending payment.</p><button class="btn light" type="button" onclick="showCurrentBankTransfer()">View bank transfer instructions</button></div></div><div id="bank-transfer-instructions" class="notice" style="display:none"></div><button class="btn light payment-back" type="button" onclick="returnToCustomerOrders()">Back to my orders</button></section>
   <div id="admin-panel" class="order-panel hide" style="margin-top:18px">
    <div class="eyebrow">Restricted owner area</div><h2 style="font-size:26px;margin:12px 0">Admin dashboard</h2>
    <p class="sub">Manage customer orders, payment checks and laundry progress.</p>
@@ -230,6 +231,11 @@ async function printReceipt(orderId){
  w.document.write('<!doctype html><html><head><title>Luxeluandry receipt</title><style>body{font:15px Arial,sans-serif;color:#173a30;padding:36px;max-width:760px;margin:auto}h1{margin-bottom:4px}small{color:#66766e}.meta{margin:24px 0;line-height:1.9}table{width:100%;border-collapse:collapse;margin:22px 0}th,td{text-align:left;padding:12px 8px;border-bottom:1px solid #ddd}.total{text-align:right;font-size:22px;font-weight:bold;margin-top:24px}.paid{display:inline-block;padding:7px 12px;background:#eaf3ed;border-radius:20px;font-weight:bold}@media print{button{display:none}}</style></head><body><h1>✦ luxeluandry</h1><small>Payment receipt</small><p class="paid">PAYMENT CONFIRMED</p><div class="meta"><b>Receipt / Order:</b> '+o.id.toUpperCase()+'<br><b>Date:</b> '+new Date(o.paid_at||o.created_at).toLocaleString()+'<br><b>Service:</b> '+escapeHtml(o.service)+'<br><b>Payment method:</b> '+escapeHtml(o.payment_preference||'Not recorded')+'<br><b>Reference:</b> '+escapeHtml(o.payment_reference||'Not available')+'</div><table><thead><tr><th>Item</th><th>Qty</th><th>Unit price</th><th>Amount</th></tr></thead><tbody>'+rows+'</tbody></table><div class="total">Total paid: '+money(Number(o.estimated_total))+'</div><p>Thank you for choosing Luxeluandry.</p><button onclick="window.print()">Print receipt</button></body></html>');
  w.document.close();w.focus();setTimeout(()=>w.print(),300);
 }
+let currentPaymentOrderId=null;let currentPaymentAmount=0;
+function openPaymentScreen(orderId,amount){currentPaymentOrderId=orderId;currentPaymentAmount=Number(amount)||0;document.querySelector('#payment-order-ref').textContent=orderId.slice(0,8).toUpperCase();document.querySelector('#payment-order-amount').textContent=money(currentPaymentAmount);document.querySelector('#bank-transfer-instructions').style.display='none';document.querySelector('#customer-orders-panel').classList.add('hide');document.querySelector('#customer-payment-screen').classList.remove('hide');document.querySelector('#customer-payment-screen').scrollIntoView({behavior:'smooth',block:'start'});}
+function returnToCustomerOrders(){document.querySelector('#customer-payment-screen').classList.add('hide');document.querySelector('#customer-orders-panel').classList.remove('hide');openCustomerSection('history');}
+async function payCurrentOrder(){if(!currentPaymentOrderId){alert('Order reference is missing. Please open your order history and try again.');return;}await startPaystack(currentPaymentOrderId);}
+function showCurrentBankTransfer(){const box=document.querySelector('#bank-transfer-instructions');box.textContent='Bank transfer has not been fully configured because the official bank name, account name and account number have not been added. Please contact Luxeluandry on WhatsApp at 08130594098 to request the correct account details. Do not transfer until you receive the official account details.';box.style.display='block';box.classList.add('show');}
 async function startPaystack(orderId){
  const {data:{session}}=await db.auth.getSession();if(!session){alert('Please log in again.');return;}
  try{
@@ -239,8 +245,7 @@ async function startPaystack(orderId){
  }catch(e){alert(e.message);}
 }
 async function showBankTransfer(orderId,amount){
- alert('Bank transfer is not open yet because the official bank name, account name and account number have not been added. Please do not transfer money until those details appear here.');
- return;
+ openPaymentScreen(orderId,amount);showCurrentBankTransfer();return;
  const reference=prompt('Enter your bank transfer reference. Never share your PIN or OTP.');
  if(!reference||!reference.trim())return;
  const {data:{user}}=await db.auth.getUser();if(!user)return;
@@ -329,10 +334,11 @@ document.querySelector('#order-form').addEventListener('submit',async e=>{
  const submit=e.target.querySelector('button[type="submit"]');submit.disabled=true;submit.textContent='Submitting…';
  try{
   const {data,error}=await db.from('orders').insert(payload).select('id').single();if(error)throw error;
-  notice.textContent='Your laundry request has been saved. Order '+data.id.slice(0,8).toUpperCase()+'. The Luxeluandry team will review it and contact you about final pricing, pickup and payment. No payment has been taken.';notice.classList.add('show');
+  notice.classList.remove('show');
   qty={};renderItems();updateSummary();await loadMyOrders(authData.user.id);
+  openPaymentScreen(data.id,total);
  }catch(err){notice.textContent='Order was not saved: '+(err.message||'Please try again.');notice.classList.add('show');}
- finally{submit.disabled=false;submit.textContent='Submit laundry request ↗';}
+ finally{submit.disabled=false;submit.textContent='Submit order request →';}
 });
 loadCustomerCatalog();
 db.auth.getSession().then(async({data})=>{
