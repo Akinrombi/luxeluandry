@@ -179,17 +179,21 @@ async function showCustomerDashboard(session){
  const user=userData.user;
  const {data:profile,error:profileError}=await db.from('profiles').select('full_name,phone,role').eq('id',user.id).single();
  if(profileError){authNotice('Your account is signed in, but your customer profile could not be loaded: '+profileError.message,true);return;}
- const isAdmin=user.app_metadata?.role==='admin';
- if(!isAdmin && profile.role!=='customer'){authNotice('This account does not have customer access.',true);await signOutCustomer();return;}
+ // The customer website is always the customer portal, even when the signed-in
+ // account also has the admin app_metadata role. Admin tools live only on the
+ // separate Luxeluandry Admin website. Customer queries remain scoped to auth.uid().
  document.querySelector('#auth-screen').classList.add('hide');
  document.querySelector('#customer-app').classList.remove('hide');
  document.querySelector('#legacy-site').classList.add('hide');
+ document.querySelector('#customer-orders-panel').classList.remove('hide');
+ document.querySelector('#admin-panel').classList.add('hide');
  mountCustomerOrderBuilder();
- document.querySelector('#dash-name').textContent=isAdmin?'Admin':(profile.full_name||user.email||'there');
+ document.querySelector('#dash-name').textContent=profile.full_name||user.email||'there';
  document.querySelector('#overview-name').textContent=profile.full_name||user.email||'there';
- document.querySelector('#customer-orders-panel').classList.toggle('hide',isAdmin);
- document.querySelector('#admin-panel').classList.toggle('hide',!isAdmin);
- if(isAdmin){await loadAdminDashboard();} else {mountCustomerOrderBuilder();await loadCustomerProfile();await loadMyOrders(user.id);openCustomerSection('dashboard');} subscribeToLiveUpdates(user.id,isAdmin);
+ await loadCustomerProfile();
+ await loadMyOrders(user.id);
+ openCustomerSection('dashboard');
+ subscribeToLiveUpdates(user.id,false);
  const nameInput=document.querySelector('[name="name"]');const phoneInput=document.querySelector('[name="phone"]');const emailInput=document.querySelector('[name="email"]');
  if(nameInput&&!nameInput.value)nameInput.value=profile.full_name||'';
  if(phoneInput&&!phoneInput.value)phoneInput.value=profile.phone||'';
