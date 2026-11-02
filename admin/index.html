@@ -16,12 +16,18 @@
      note.style.display='block';
    }
  },true);
- window.addEventListener('error',function(){
+ window.addEventListener('error',function(event){
+   if(event.target!==window || window.__luxeluandryAdminLoginReady)return;
    const note=document.getElementById('note');
-   if(note&&!window.__luxeluandryAdminLoginReady){
-     note.textContent='The sign-in page encountered a loading problem. Please refresh and try again.';
+   if(note){
+     note.textContent='A page script failed to start: '+(event.message||'Unknown script error')+'. Please refresh the page.';
      note.style.display='block';
    }
+ });
+ const supabaseScript=document.querySelector('script[src*="supabase-js"]');
+ if(supabaseScript)supabaseScript.addEventListener('error',function(){
+   const note=document.getElementById('note');
+   if(note){note.textContent='The secure sign-in service could not load. Check your internet connection, then refresh.';note.style.display='block';}
  });
 })();
 </script>
@@ -33,7 +39,7 @@
 <section id="services" class="section"><div class="panel"><h3>Prices & customer stock</h3><div class="panel" style="margin:14px 0;background:#f7faf5"><h3>Urgent service fee</h3><p class="muted">Set the extra amount customers pay when they choose urgent laundry service. The new amount applies to future orders.</p><form id="urgent-fee-form" class="toolbar" style="align-items:end"><label>Urgent fee (₦)<input id="urgent-fee-input" type="number" min="0" step="1" required value="1000"></label><button class="btn" type="submit">Save urgent fee</button></form><div id="urgent-fee-note" class="muted" aria-live="polite"></div></div><p class="muted">Changes here are saved to the shared catalogue used by the customer website.</p><form id="catalog-form" class="toolbar" style="align-items:end"><input id="cat-id" type="hidden"><label>Item name<input id="cat-name" required placeholder="e.g. Duvet"></label><label>Icon<input id="cat-icon" value="🧺" maxlength="8" style="width:75px"></label><label>Wash & iron (₦)<input id="cat-washiron" type="number" min="0" required></label><label>Wash only (₦)<input id="cat-wash" type="number" min="0" required></label><label>Iron only (₦)<input id="cat-iron" type="number" min="0" required></label><label>Starch (₦)<input id="cat-starch" type="number" min="0" required></label><label>Stock quantity<input id="cat-stock" type="number" min="0" required value="0"></label><label>Customer visibility<select id="cat-active"><option value="true">Available</option><option value="false">Hidden</option></select></label><button class="btn" type="submit">Save item</button><button class="btn alt" type="button" id="cat-reset">Clear</button></form><div id="catalog-note" class="notice hidden"></div><div id="prices" class="table-wrap"></div></div></section></main><nav class="mobile" id="mobile"></nav></div>
 
 <script>
-const SUPABASE_URL='https://hgsayfimvqwrovuqjfxh.supabase.co',KEY='sb_publishable_IG76xxrAxeJGF5k36xzntA_lrY4-9vV';let db=null;try{if(!window.supabase?.createClient)throw new Error('The secure login service did not load. Check your internet connection and reload this page.');db=window.supabase.createClient(SUPABASE_URL,KEY);}catch(initError){const n=document.querySelector('#note');n.textContent='Login setup error: '+(initError.message||'Could not start login service.');n.classList.remove('hidden');}
+const SUPABASE_URL='https://hgsayfimvqwrovuqjfxh.supabase.co',KEY='sb_publishable_IG76xxrAxeJGF5k36xzntA_lrY4-9vV';let db=null;try{if(!window.supabase?.createClient)throw new Error('The secure login service did not load. Check your internet connection and reload this page.');db=window.supabase.createClient(SUPABASE_URL,KEY);}catch(initError){const n=document.querySelector('#note');n.textContent='Login setup error: '+(initError.message||'Could not start login service.');n.classList.remove('hidden');n.style.display='block';}
 let orders=[],payments=[],profiles=[],catalog=[];const statuses=['pending_review','confirmed','pickup_scheduled','picked_up','washing','ironing','ready','out_for_delivery','delivered','cancelled'];const money=n=>'₦'+Number(n||0).toLocaleString('en-NG');const pretty=s=>String(s||'pending').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const views=['overview','orders','payments','customers','services'];function nav(){for(const id of ['side','mobile'])document.querySelector('#'+id).innerHTML=views.map(v=>'<button data-v="'+v+'">'+({overview:'▦ Overview',orders:'▤ Orders',payments:'₦ Payments',customers:'♙ Customers',services:'◇ Prices & stock'}[v])+'</button>').join('');document.querySelectorAll('[data-v]').forEach(b=>b.addEventListener('click',()=>view(b.dataset.v)));}
 function view(v){document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active',s.id===v));document.querySelectorAll('[data-v]').forEach(b=>b.classList.toggle('active',b.dataset.v===v));document.querySelector('#heading').textContent=v[0].toUpperCase()+v.slice(1);}
